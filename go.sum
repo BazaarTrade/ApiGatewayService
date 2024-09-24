@@ -1,5 +1,7 @@
 github.com/BazaarTrade/GeneratedProto v0.0.0-20240920110500-1bdae26091ef h1:Terwz7JLVAI/7cqsglgqVCQuD6S1cvTk7EaZRYogRDk=
 github.com/BazaarTrade/GeneratedProto v0.0.0-20240920110500-1bdae26091ef/go.mod h1:2uYoCCiQ2pNoEHP/fmw0bJ+jf5n3fk98+9S2Qi4OFrY=
+github.com/coder/websocket v1.8.12 h1:5bUXkEPPIbewrnkU8LTCLVaxi4N4J8ahufH2vlo4NAo=
+github.com/coder/websocket v1.8.12/go.mod h1:LNVeNrXQZfe5qhS9ALED3uA+l5pPqvwXg3CKoDBB2gs=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/golang-jwt/jwt v3.2.2+incompatible h1:IfV12K8xAKAnZqdXVzCZ+TOjboZ2keLg81eXfW3O+oY=

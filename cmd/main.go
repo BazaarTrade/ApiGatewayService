@@ -1,12 +1,9 @@
 package main
 
 import (
-	api "github.com/BazaarTrade/ApiGatewayService/internal/api/http"
-	"github.com/labstack/echo/v4"
+	"github.com/BazaarTrade/ApiGatewayService/internal/app"
 )
 
 func main() {
-	e := echo.New()
-
-	api.NewHandler().Init(e)
+	app.Run()
 }
