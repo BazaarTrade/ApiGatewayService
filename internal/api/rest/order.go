@@ -19,11 +19,6 @@ func (s *Server) placeOrder(c echo.Context) error {
 	}
 
 	switch {
-	case req.UserID < 1:
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "invalid userID",
-		})
-
 	case req.Type != "market" && req.Type != "limit":
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "invalid order type",
@@ -40,32 +35,23 @@ func (s *Server) placeOrder(c echo.Context) error {
 		})
 	}
 
-	updatedOrders, err := s.clientGRPC.PlaceOrder(&req)
+	order, matchOrders, err := s.mClient.PlaceOrder(&req)
 	if err != nil {
 		st, _ := status.FromError(err)
-		switch st.Message() {
-		case "failed to find order book", "not enough ask volume", "not enough bid volume":
+		if st.Message() != "" {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"error": st.Message(),
 			})
-		default:
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": "internal error in matching engine",
-			})
 		}
-	}
-
-	if len(updatedOrders) == 0 {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "no orders were updated",
+			"error": "internal error in matching engine",
 		})
 	}
 
-	for i := 1; i < len(updatedOrders); i++ {
-		go s.hub.BroadcastOrder(updatedOrders[i])
+	for _, matchOrder := range matchOrders {
+		go s.hub.BroadcastOrder(matchOrder)
 	}
-
-	return c.JSON(http.StatusOK, updatedOrders[0])
+	return c.JSON(http.StatusOK, order)
 }
 
 func (s *Server) cancelOrder(c echo.Context) error {
@@ -83,13 +69,12 @@ func (s *Server) cancelOrder(c echo.Context) error {
 		})
 	}
 
-	order, err := s.clientGRPC.CancelOrder(&pbM.OrderID{OrderID: int64(id)})
+	order, err := s.mClient.CancelOrder(&pbM.OrderID{OrderID: int64(id)})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "internal error in matching engine service",
 		})
 	}
-
 	return c.JSON(http.StatusOK, order)
 }
 
@@ -108,13 +93,12 @@ func (s *Server) getCurrentOrders(c echo.Context) error {
 		})
 	}
 
-	orders, err := s.clientGRPC.GetCurrentOrders(&pbM.UserID{UserID: int64(userID)})
+	orders, err := s.mClient.GetCurrentOrders(&pbM.UserID{UserID: int64(userID)})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "internal error in matching engine service",
 		})
 	}
-
 	return c.JSON(http.StatusOK, orders)
 }
 
@@ -133,12 +117,11 @@ func (s *Server) getOrders(c echo.Context) error {
 		})
 	}
 
-	orders, err := s.clientGRPC.GetOrders(&pbM.UserID{UserID: int64(userID)})
+	orders, err := s.mClient.GetOrders(&pbM.UserID{UserID: int64(userID)})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "internal error in matching engine service",
 		})
 	}
-
 	return c.JSON(http.StatusOK, orders)
 }

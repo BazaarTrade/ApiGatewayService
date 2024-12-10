@@ -4,28 +4,59 @@ import (
 	"log/slog"
 	"os"
 
-	clientGRPC "github.com/BazaarTrade/ApiGatewayService/internal/api/gRPC"
+	mClient "github.com/BazaarTrade/ApiGatewayService/internal/api/gRPC/matchingEngineClient"
+	qClient "github.com/BazaarTrade/ApiGatewayService/internal/api/gRPC/quoteClient"
 	"github.com/BazaarTrade/ApiGatewayService/internal/api/rest"
 	ws "github.com/BazaarTrade/ApiGatewayService/internal/api/websocket"
+	"github.com/joho/godotenv"
 )
 
 func Run() {
-	handler := slog.NewTextHandler(os.Stdout, nil)
-	logger := slog.New(handler)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	if _, err := os.Stat(".env"); err == nil {
+		if err := godotenv.Load(".env"); err != nil {
+			logger.Error("failed to load .env file")
+		}
+	}
 
 	logger.Info("starting aplication...")
 
 	hub := ws.NewHub(logger)
 
-	clientGRPC := clientGRPC.New(hub, logger)
-	clientGRPC.RunPBMClient()
-	clientGRPC.RunPBQClient()
+	mClient := mClient.New(hub, logger)
+	if err := mClient.Run(); err != nil {
+		return
+	}
+	defer mClient.CloseConnection()
 
-	go clientGRPC.ReadPrecisedOrderBookSnapshot()
-	go clientGRPC.ReadPrecisedTrades()
+	qClient := qClient.New(hub, logger)
+	if err := qClient.Run(); err != nil {
+		return
+	}
+	defer qClient.CloseConnection()
 
-	defer clientGRPC.CloseConnections()
+	if err := initOrderBooks(mClient, qClient, hub); err != nil {
+		return
+	}
 
-	server := rest.New(hub, clientGRPC, logger)
-	server.Run()
+	rest := rest.New(mClient, qClient, hub, logger)
+	if err := rest.Run(); err != nil {
+		return
+	}
+}
+
+func initOrderBooks(mClient *mClient.Client, qClient *qClient.Client, hub *ws.Hub) error {
+	pairsParams, err := mClient.GetPairsParams()
+	if err != nil {
+		return err
+	}
+
+	for _, pairParams := range pairsParams {
+		qClient.StartStreamReaders(pairParams.Pair)
+		hub.AddOrderBookUpdateTopic(pairParams.Pair, pairParams.PricePrecisions)
+		hub.AddTradesTopic(pairParams.Pair)
+		hub.AddTickerTopic(pairParams.Pair)
+	}
+	return nil
 }

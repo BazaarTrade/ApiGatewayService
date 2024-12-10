@@ -5,29 +5,39 @@ import (
 
 	"github.com/BazaarTrade/ApiGatewayService/internal/models"
 	"github.com/BazaarTrade/MatchingEngineProtoGen/pbM"
+	"github.com/BazaarTrade/QuoteProtoGen/pbQ"
 )
 
-func ProtoOrderToOrder(order *pbM.Order) models.Order {
-	var createdAt, closedAt string
-
-	if order.CreatedAt != nil {
-		createdAt = order.CreatedAt.AsTime().Format(time.RFC3339)
-	}
-	if order.ClosedAt != nil {
-		closedAt = order.ClosedAt.AsTime().Format(time.RFC3339)
-	}
-
+func ProtoOrderToModelsOrder(order *pbM.Order) models.Order {
 	return models.Order{
-		ID:         order.ID,
-		UserID:     order.UserID,
+		ID:         int(order.ID),
+		UserID:     int(order.UserID),
 		IsBid:      order.IsBid,
-		Symbol:     order.Symbol,
+		Pair:       order.Pair,
 		Price:      order.Price,
 		Qty:        order.Qty,
 		SizeFilled: order.SizeFilled,
 		Status:     order.Status,
 		Type:       order.Type,
-		CreatedAt:  createdAt,
-		ClosedAt:   closedAt,
+		CreatedAt:  order.CreatedAt.AsTime().Format(time.RFC3339),
+		ClosedAt:   order.ClosedAt.AsTime().Format(time.RFC3339),
+	}
+}
+
+func ProtoPairParamsToModelsPairParams(pairParams *pbM.PairParams) models.PairParams {
+	return models.PairParams{
+		Pair:            pairParams.Pair,
+		PricePrecisions: pairParams.PricePrecisions,
+		QtyPrecision:    pairParams.QtyPrecision,
+	}
+}
+
+func ProtoTickerToModelsTicker(ticker *pbQ.Ticker) models.Ticker {
+	return models.Ticker{
+		Price:     ticker.Price,
+		Change:    ticker.Change,
+		HighPrice: ticker.HighPrice,
+		LowPrice:  ticker.LowPrice,
+		Turnover:  ticker.Turnover,
 	}
 }

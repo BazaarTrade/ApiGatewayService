@@ -3,10 +3,10 @@ package models
 import "time"
 
 type Order struct {
-	ID         int64  `json:"orderID"`
-	UserID     int64  `json:"userID"`
+	ID         int    `json:"orderID"`
+	UserID     int    `json:"userID"`
 	IsBid      bool   `json:"isBid"`
-	Symbol     string `json:"symbol"`
+	Pair       string `json:"pair"`
 	Price      string `json:"price"`
 	Qty        string `json:"qty"`
 	SizeFilled string `json:"sizeFilled"`
@@ -17,9 +17,9 @@ type Order struct {
 }
 
 type PlaceOrderReq struct {
-	UserID int64  `json:"userID"`
+	UserID int    `json:"userID"`
 	IsBid  bool   `json:"isBid"`
-	Symbol string `json:"symbol"`
+	Pair   string `json:"pair"`
 	Price  string `json:"price"`
 	Qty    string `json:"qty"`
 	Type   string `json:"type"` // Market или Limit
@@ -29,13 +29,13 @@ type SubscriptionRequest struct {
 	Action string `json:"action"`
 	Topic  string `json:"topic"`
 	Params struct {
-		Symbol    string `json:"symbol"`
+		Pair      string `json:"pair"`
 		Precision int32  `json:"precision"`
 	} `json:"params"`
 }
 
 type OrderBookSnapshot struct {
-	Symbol  string  `json:"symbol"`
+	Pair    string  `json:"pair"`
 	Bids    []Limit `json:"bids"`
 	Asks    []Limit `json:"asks"`
 	BidsQty string  `json:"bidsQty"`
@@ -48,7 +48,7 @@ type Limit struct {
 }
 
 type Trades struct {
-	Symbol string  `json:"symbol"`
+	Pair   string  `json:"pair"`
 	Trades []Trade `json:"trades"`
 }
 
@@ -57,4 +57,18 @@ type Trade struct {
 	Price string    `json:"price"`
 	Qty   string    `json:"qty"`
 	Time  time.Time `json:"time"`
+}
+
+type PairParams struct {
+	Pair            string  `json:"pair"`
+	PricePrecisions []int32 `json:"pricePrecisions"`
+	QtyPrecision    int32   `json:"qtyPrecision"`
+}
+
+type Ticker struct {
+	Price     string `json:"price"`
+	Change    string `json:"change"`
+	HighPrice string `json:"highPrice"`
+	LowPrice  string `json:"lowPrice"`
+	Turnover  string `json:"turnover"`
 }

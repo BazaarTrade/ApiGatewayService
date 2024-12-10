@@ -49,13 +49,13 @@ func (h *Hub) BroadcastOrder(order models.Order) error {
 func (h *Hub) BroadcastPrecisedOrderBookSnapshot(pOBS models.OrderBookSnapshot, precision int32) {
 	h.mu.RLock()
 	subscribers, exists := h.Subscribers["orderBook"][OrderBookParams{
-		Symbol:    pOBS.Symbol,
+		Pair:      pOBS.Pair,
 		Precision: precision,
 	}]
 	h.mu.RUnlock()
 
 	if !exists || subscribers == nil {
-		h.logger.Info("no subscribers for orderBook", "symbol", pOBS.Symbol, "precision", precision)
+		h.logger.Info("no subscribers for orderBook", "pair", pOBS.Pair, "precision", precision)
 		return
 	}
 
@@ -90,12 +90,12 @@ func (h *Hub) BroadcastPrecisedOrderBookSnapshot(pOBS models.OrderBookSnapshot, 
 func (h *Hub) BroadcastPrecisedTrades(precisedTrades models.Trades) {
 	h.mu.RLock()
 	subscribers, exists := h.Subscribers["trades"][TradesParams{
-		Symbol: precisedTrades.Symbol,
+		Pair: precisedTrades.Pair,
 	}]
 	h.mu.RUnlock()
 
 	if !exists || subscribers == nil {
-		h.logger.Info("no subscribers for trades", "symbol", precisedTrades.Symbol)
+		h.logger.Info("no subscribers for trades", "pair", precisedTrades.Pair)
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *Hub) BroadcastPrecisedTrades(precisedTrades models.Trades) {
 		Params: precisedTrades,
 	}
 
-	OBSJSON, err := json.Marshal(message)
+	tradesJSON, err := json.Marshal(message)
 	if err != nil {
 		h.logger.Error("failed to marshal precised trades message", "error", err)
 		return
@@ -118,9 +118,55 @@ func (h *Hub) BroadcastPrecisedTrades(precisedTrades models.Trades) {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 
-			err := c.Conn.Write(context.Background(), websocket.MessageText, OBSJSON)
+			err := c.Conn.Write(context.Background(), websocket.MessageText, tradesJSON)
 			if err != nil {
 				h.logger.Error("failed to write precised trades message to websocket", "error", err)
+				return
+			}
+		}(client)
+	}
+}
+
+func (h *Hub) BroadcastTicker(ticker models.Ticker, pair string) {
+	h.mu.RLock()
+	subscribers, exists := h.Subscribers["ticker"][TickerParams{
+		Pair: pair,
+	}]
+	h.mu.RUnlock()
+
+	if !exists || subscribers == nil {
+		h.logger.Info("no subscribers for ticker", "pair", pair)
+		return
+	}
+
+	message := struct {
+		Topic  string `json:"topic"`
+		Params struct {
+			Pair   string        `json:"pair"`
+			Ticker models.Ticker `json:"ticker"`
+		} `json:"params"`
+	}{
+		Topic: "ticker",
+		Params: struct {
+			Pair   string        `json:"pair"`
+			Ticker models.Ticker `json:"ticker"`
+		}{Pair: pair, Ticker: ticker},
+	}
+
+	tickerJSON, err := json.Marshal(message)
+	if err != nil {
+		h.logger.Error("failed to marshal ticker message", "error", err)
+		return
+	}
+
+	for client := range subscribers.Clients {
+		go func(c *Client) {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+
+			err := c.Conn.Write(context.Background(), websocket.MessageText, tickerJSON)
+			if err != nil {
+				h.logger.Error("failed to write ticker message to websocket", "error", err)
 				return
 			}
 		}(client)

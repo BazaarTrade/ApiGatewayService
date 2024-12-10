@@ -3,11 +3,13 @@ module github.com/BazaarTrade/ApiGatewayService
 go 1.23.1
 
 require (
-	github.com/BazaarTrade/MatchingEngineProtoGen v0.0.0-20241020092616-47f1a66433a1
-	github.com/BazaarTrade/QuoteProtoGen v0.0.0-20241020091919-c4687f1e26d0
+	github.com/BazaarTrade/MatchingEngineProtoGen v0.0.0-20241030114547-86c01b00cf55
+	github.com/BazaarTrade/QuoteProtoGen v0.0.0-20241209141633-59989b33df9a
 	github.com/coder/websocket v1.8.12
+	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.12.0
 	google.golang.org/grpc v1.67.1
+	google.golang.org/protobuf v1.35.1
 )
 
 require (
@@ -23,5 +25,4 @@ require (
 	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
-	google.golang.org/protobuf v1.35.1 // indirect
 )
