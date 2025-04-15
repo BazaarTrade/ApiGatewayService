@@ -16,13 +16,19 @@ func (s *Server) createOrderBook(c echo.Context) error {
 		})
 	}
 
-	if pairParams.Pair == "" || len(pairParams.Pair) < 4 || len(pairParams.PricePrecisions) < 1 {
+	if pairParams.Pair == "" || len(pairParams.Pair) < 4 || len(pairParams.OrderBookPricePrecisions) < 1 {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "invalid request",
 		})
 	}
 
-	err := s.mClient.CreateOrderBook(pairParams)
+	if err := s.db.CreatePair(pairParams); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "ivalid request",
+		})
+	}
+
+	err := s.mClient.CreateOrderBook(pairParams.Pair)
 	if err != nil {
 		return c.JSON(http.StatusOK, map[string]string{
 			"error": "internal error in matching engine service",
@@ -36,9 +42,11 @@ func (s *Server) createOrderBook(c echo.Context) error {
 		})
 	}
 
-	s.qClient.StartStreamReaders(pairParams.Pair)
-	s.hub.AddOrderBookUpdateTopic(pairParams.Pair, pairParams.PricePrecisions)
+	s.hub.AddOrderBookSnapshotTopic(pairParams.Pair, pairParams.OrderBookPricePrecisions)
 	s.hub.AddTradesTopic(pairParams.Pair)
+	s.hub.AddTickerTopic(pairParams.Pair)
+	s.hub.AddCandleStickTopic(pairParams.Pair, pairParams.CandleStickTimeframes)
+	s.qClient.StartStreamReaders(pairParams.Pair)
 
 	return c.JSON(http.StatusOK, map[string]string{
 		"message": "orderbook created successfully",
@@ -53,16 +61,24 @@ func (s *Server) deleteOrderBook(c echo.Context) error {
 		})
 	}
 
-	pricePrecisions, err := s.mClient.GetPairPricePrecisions(pair)
+	orderBookPricePrecisions, err := s.db.GetOrderBookPricePrecisions(pair)
 	if err != nil {
-		return c.JSON(http.StatusOK, map[string]string{
-			"error": "internal error in matching engine service",
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "pair not found",
 		})
 	}
 
-	s.hub.RemoveOrderBookUpdateTopic(pair, pricePrecisions)
+	candleStickTimeframes, err := s.db.GetCandleStickTimeframes(pair)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "pair not found",
+		})
+	}
+
+	s.hub.RemoveOrderBookSnapshotTopic(pair, orderBookPricePrecisions)
 	s.hub.RemoveTradesTopic(pair)
 	s.hub.RemoveTickerTopic(pair)
+	s.hub.RemoveCandleStickTopic(pair, candleStickTimeframes)
 
 	if err := s.qClient.DeleteOrderBook(pair); err != nil {
 		return c.JSON(http.StatusOK, map[string]string{
@@ -81,7 +97,7 @@ func (s *Server) deleteOrderBook(c echo.Context) error {
 	})
 }
 
-func (s *Server) getPairPricePrecisions(c echo.Context) error {
+func (s *Server) getOrderBookPricePrecisions(c echo.Context) error {
 	pair := c.Param("pair")
 	if pair == "" || len(pair) < 4 {
 		return c.JSON(http.StatusBadRequest, map[string]string{
@@ -89,14 +105,14 @@ func (s *Server) getPairPricePrecisions(c echo.Context) error {
 		})
 	}
 
-	pricePrecisions, err := s.mClient.GetPairPricePrecisions(pair)
+	orderBookPricePrecisions, err := s.db.GetOrderBookPricePrecisions(pair)
 	if err != nil {
-		return c.JSON(http.StatusOK, map[string]string{
-			"error": "internal error in matching engine service",
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "pair not found",
 		})
 	}
 
 	return c.JSON(http.StatusOK, struct {
-		PricePrecisions []int32 `json:"pricePrecisions"`
-	}{pricePrecisions})
+		OrderBookPricePrecisions []int32 `json:"orderBookPricePrecisions"`
+	}{orderBookPricePrecisions})
 }

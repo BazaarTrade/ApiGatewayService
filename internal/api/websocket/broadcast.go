@@ -46,16 +46,16 @@ func (h *Hub) BroadcastOrder(order models.Order) error {
 	return nil
 }
 
-func (h *Hub) BroadcastPrecisedOrderBookSnapshot(pOBS models.OrderBookSnapshot, precision int32) {
+func (h *Hub) BroadcastPrecisedOrderBookSnapshot(pOBS models.OrderBookSnapshot, orderBookprecision int32) {
 	h.mu.RLock()
 	subscribers, exists := h.Subscribers["orderBook"][OrderBookParams{
 		Pair:      pOBS.Pair,
-		Precision: precision,
+		Precision: orderBookprecision,
 	}]
 	h.mu.RUnlock()
 
 	if !exists || subscribers == nil {
-		h.logger.Info("no subscribers for orderBook", "pair", pOBS.Pair, "precision", precision)
+		h.logger.Info("failed to find subscribers for orderBook", "pair", pOBS.Pair, "orderBookprecision", orderBookprecision)
 		return
 	}
 
@@ -87,21 +87,21 @@ func (h *Hub) BroadcastPrecisedOrderBookSnapshot(pOBS models.OrderBookSnapshot, 
 	}
 }
 
-func (h *Hub) BroadcastPrecisedTrades(precisedTrades models.Trades) {
+func (h *Hub) BroadcastPrecisedTrades(precisedTrades []models.Trade) {
 	h.mu.RLock()
 	subscribers, exists := h.Subscribers["trades"][TradesParams{
-		Pair: precisedTrades.Pair,
+		Pair: precisedTrades[0].Pair,
 	}]
 	h.mu.RUnlock()
 
 	if !exists || subscribers == nil {
-		h.logger.Info("no subscribers for trades", "pair", precisedTrades.Pair)
+		h.logger.Info("failed to find subscribers for trades", "pair", precisedTrades[0].Pair)
 		return
 	}
 
 	message := struct {
-		Topic  string        `json:"topic"`
-		Params models.Trades `json:"params"`
+		Topic  string         `json:"topic"`
+		Params []models.Trade `json:"params"`
 	}{
 		Topic:  "trades",
 		Params: precisedTrades,
@@ -127,30 +127,24 @@ func (h *Hub) BroadcastPrecisedTrades(precisedTrades models.Trades) {
 	}
 }
 
-func (h *Hub) BroadcastTicker(ticker models.Ticker, pair string) {
+func (h *Hub) BroadcastTicker(ticker models.Ticker) {
 	h.mu.RLock()
 	subscribers, exists := h.Subscribers["ticker"][TickerParams{
-		Pair: pair,
+		Pair: ticker.Pair,
 	}]
 	h.mu.RUnlock()
 
 	if !exists || subscribers == nil {
-		h.logger.Info("no subscribers for ticker", "pair", pair)
+		h.logger.Info("failed to find subscribers for ticker", "pair", ticker.Pair)
 		return
 	}
 
 	message := struct {
-		Topic  string `json:"topic"`
-		Params struct {
-			Pair   string        `json:"pair"`
-			Ticker models.Ticker `json:"ticker"`
-		} `json:"params"`
+		Topic  string        `json:"topic"`
+		Params models.Ticker `json:"params"`
 	}{
-		Topic: "ticker",
-		Params: struct {
-			Pair   string        `json:"pair"`
-			Ticker models.Ticker `json:"ticker"`
-		}{Pair: pair, Ticker: ticker},
+		Topic:  "ticker",
+		Params: ticker,
 	}
 
 	tickerJSON, err := json.Marshal(message)
@@ -167,6 +161,47 @@ func (h *Hub) BroadcastTicker(ticker models.Ticker, pair string) {
 			err := c.Conn.Write(context.Background(), websocket.MessageText, tickerJSON)
 			if err != nil {
 				h.logger.Error("failed to write ticker message to websocket", "error", err)
+				return
+			}
+		}(client)
+	}
+}
+
+func (h *Hub) BroadcastCandleStick(candleStick models.CandleStick) {
+	h.mu.RLock()
+	subscribers, exists := h.Subscribers["candleStick"][CandleStickParams{
+		Pair:      candleStick.Pair,
+		Timeframe: candleStick.Timeframe,
+	}]
+	h.mu.RUnlock()
+
+	if !exists || subscribers == nil {
+		h.logger.Info("faied to find subscribers for candleStick", "pair", candleStick.Pair)
+		return
+	}
+
+	message := struct {
+		Topic  string             `json:"topic"`
+		Params models.CandleStick `json:"params"`
+	}{
+		Topic:  "candleStick",
+		Params: candleStick,
+	}
+
+	candleStickJSON, err := json.Marshal(message)
+	if err != nil {
+		h.logger.Error("failed to marshal candleStick message", "error", err)
+		return
+	}
+
+	for client := range subscribers.Clients {
+		go func(c *Client) {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+
+			err := c.Conn.Write(context.Background(), websocket.MessageText, candleStickJSON)
+			if err != nil {
+				h.logger.Error("failed to write candleStick message to websocket", "error", err)
 				return
 			}
 		}(client)

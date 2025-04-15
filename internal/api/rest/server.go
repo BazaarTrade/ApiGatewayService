@@ -6,6 +6,7 @@ import (
 	mClient "github.com/BazaarTrade/ApiGatewayService/internal/api/gRPC/matchingEngineClient"
 	qClient "github.com/BazaarTrade/ApiGatewayService/internal/api/gRPC/quoteClient"
 	ws "github.com/BazaarTrade/ApiGatewayService/internal/api/websocket"
+	"github.com/BazaarTrade/ApiGatewayService/internal/repository"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -14,15 +15,18 @@ type Server struct {
 	mClient *mClient.Client
 	qClient *qClient.Client
 
-	hub    *ws.Hub
+	hub *ws.Hub
+
+	db     repository.Repository
 	logger *slog.Logger
 }
 
-func New(mClient *mClient.Client, qClient *qClient.Client, hub *ws.Hub, logger *slog.Logger) *Server {
+func New(mClient *mClient.Client, qClient *qClient.Client, hub *ws.Hub, db repository.Repository, logger *slog.Logger) *Server {
 	return &Server{
 		mClient: mClient,
 		qClient: qClient,
 		hub:     hub,
+		db:      db,
 		logger:  logger,
 	}
 }
@@ -42,7 +46,6 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) init(e *echo.Echo) {
-	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
 	e.POST("/order", s.placeOrder)
@@ -52,7 +55,8 @@ func (s *Server) init(e *echo.Echo) {
 	e.POST("/orderbook", s.createOrderBook)
 	e.DELETE("/orderbook/:pair", s.deleteOrderBook)
 	e.GET("/ws/:userID", s.hub.HandleWebsocket)
-	e.GET("/pricePrecisions/:pair", s.getPairPricePrecisions)
+	e.GET("/orderBookPricePrecisions/:pair", s.getOrderBookPricePrecisions)
+	e.GET("/candleSticks", s.getCandleStickHistory)
 }
 
 func CORS(e *echo.Echo) {

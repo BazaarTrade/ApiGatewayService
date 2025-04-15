@@ -3,6 +3,8 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -12,23 +14,6 @@ import (
 	"github.com/coder/websocket"
 	"github.com/labstack/echo/v4"
 )
-
-type OrderBookParams struct {
-	Pair      string
-	Precision int32
-}
-
-type TradesParams struct {
-	Pair string
-}
-
-type TickerParams struct {
-	Pair string
-}
-
-type Subscribers struct {
-	Clients map[*Client]bool
-}
 
 type Hub struct {
 	Users       map[int]*User
@@ -46,6 +31,28 @@ type Client struct {
 	Conn   *websocket.Conn
 	Topics map[string]any
 	mu     sync.RWMutex
+}
+
+type Subscribers struct {
+	Clients map[*Client]bool
+}
+
+type OrderBookParams struct {
+	Pair      string `json:"pair"`
+	Precision int32  `json:"precision"`
+}
+
+type TradesParams struct {
+	Pair string `json:"pair"`
+}
+
+type TickerParams struct {
+	Pair string `json:"pair"`
+}
+
+type CandleStickParams struct {
+	Pair      string `json:"pair"`
+	Timeframe string `json:"timeframe"`
 }
 
 func NewHub(logger *slog.Logger) *Hub {
@@ -81,6 +88,8 @@ func (h *Hub) HandleWebsocket(c echo.Context) error {
 	}
 
 	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	user, ok := h.Users[userID]
 	if !ok {
 		h.Users[userID] = &User{
@@ -97,7 +106,6 @@ func (h *Hub) HandleWebsocket(c echo.Context) error {
 	}
 
 	user.Clients[client] = true
-	h.mu.Unlock()
 
 	go h.readPump(client, userID)
 
@@ -129,6 +137,10 @@ func (h *Hub) readPump(c *Client, userID int) {
 	for {
 		_, msg, err := c.Conn.Read(context.Background())
 		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure || websocket.CloseStatus(err) == websocket.StatusGoingAway || errors.Is(err, io.EOF) {
+				h.logger.Debug("client disconnected from websocket", "userID", userID)
+				return
+			}
 			h.logger.Error("failed to read websocket connection", "error", err)
 			return
 		}
@@ -139,10 +151,14 @@ func (h *Hub) readPump(c *Client, userID int) {
 			continue
 		}
 
-		params, valid := h.validateParams(request)
+		valid, params, err := h.unmarshalParams(request)
+		if err != nil {
+			continue
+		}
+
 		if !valid {
 			messageJSON, err := json.Marshal(map[string]string{
-				"error": "no such topic exists",
+				"error": "invalid request",
 			})
 			if err != nil {
 				h.logger.Error("failed to marshal error message", "error", err)
@@ -169,38 +185,63 @@ func (h *Hub) readPump(c *Client, userID int) {
 	}
 }
 
-func (h *Hub) validateParams(request models.SubscriptionRequest) (any, bool) {
+func (h *Hub) unmarshalParams(request models.SubscriptionRequest) (bool, any, error) {
 	switch request.Topic {
 	case "orderBook":
-		if request.Params.Pair == "" || request.Params.Precision == 0 {
-			h.logger.Error("invalid parameters for orderBook subscription")
-			return nil, false
+		var params OrderBookParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			h.logger.Error("failed to unmarshal orderBook params", "error", err)
+			return false, nil, err
 		}
-		return OrderBookParams{
-			Pair:      request.Params.Pair,
-			Precision: request.Params.Precision,
-		}, true
+
+		if params.Pair == "" {
+			h.logger.Error("invalid parameters for orderBook subscription")
+			return false, nil, nil
+		}
+		return true, params, nil
 
 	case "trades":
-		if request.Params.Pair == "" {
-			h.logger.Error("invalid parameters for trades subscription")
-			return nil, false
+		var params TradesParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			h.logger.Error("failed to unmarshal trades params", "error", err)
+			return false, nil, err
 		}
-		return TradesParams{
-			Pair: request.Params.Pair,
-		}, true
+
+		if params.Pair == "" {
+			h.logger.Error("invalid parameters for trades subscription")
+			return false, nil, nil
+		}
+		return true, params, nil
 
 	case "ticker":
-		if request.Params.Pair == "" {
-			h.logger.Error("invalid parameters for ticker subscription")
-			return nil, false
+		var params TickerParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			h.logger.Error("failed to unmarshal ticker params", "error", err)
+			return false, nil, err
 		}
-		return TickerParams{
-			Pair: request.Params.Pair,
-		}, true
+
+		if params.Pair == "" {
+			h.logger.Error("invalid parameters for ticker subscription")
+			return false, nil, nil
+		}
+		return true, params, nil
+
+	case "candleStick":
+		var params CandleStickParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			h.logger.Error("failed to unmarshal candleStick params", "error", err)
+			return false, nil, err
+		}
+
+		if params.Pair == "" || params.Timeframe == "" {
+			h.logger.Error("invalid parameters for candleStick subscription")
+			return false, nil, nil
+		}
+		return true, params, nil
+
 	default:
 		h.logger.Error("attempt to subscribe to a non-existent topic")
-		return nil, false
+		return false, nil, nil
 	}
 }
 
@@ -269,16 +310,35 @@ func (h *Hub) unsubscribeClient(c *Client, topic string, params any) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if _, exists := h.Subscribers[topic][params]; exists {
-		delete(h.Subscribers[topic][params].Clients, c)
+	if subscribers, exists := h.Subscribers[topic][params]; exists {
+		delete(subscribers.Clients, c)
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.Topics, topic)
+
+	subscriptionMessage := struct {
+		Topic  string `json:"topic"`
+		Status string `json:"status"`
+	}{
+		Topic:  topic,
+		Status: "unsubscribed",
+	}
+
+	messageJSON, err := json.Marshal(subscriptionMessage)
+	if err != nil {
+		h.logger.Error("failed to marshal subscription message", "error", err)
+		return
+	}
+
+	if err := c.Conn.Write(context.Background(), websocket.MessageText, messageJSON); err != nil {
+		h.logger.Error("failed to write subscription message to websocket", "error", err)
+		return
+	}
 }
 
-func (h *Hub) AddOrderBookUpdateTopic(pair string, pricePrecisions []int32) {
+func (h *Hub) AddOrderBookSnapshotTopic(pair string, orderBookPricePrecisions []int32) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -286,12 +346,12 @@ func (h *Hub) AddOrderBookUpdateTopic(pair string, pricePrecisions []int32) {
 		h.Subscribers["orderBook"] = make(map[any]*Subscribers)
 	}
 
-	for _, pricePrecision := range pricePrecisions {
+	for _, pricePrecision := range orderBookPricePrecisions {
 		h.Subscribers["orderBook"][OrderBookParams{Pair: pair, Precision: pricePrecision}] = &Subscribers{Clients: map[*Client]bool{}}
 	}
 }
 
-func (h *Hub) RemoveOrderBookUpdateTopic(pair string, pricePrecisions []int32) {
+func (h *Hub) RemoveOrderBookSnapshotTopic(pair string, pricePrecisions []int32) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -339,5 +399,29 @@ func (h *Hub) RemoveTickerTopic(pair string) {
 
 	if topic, exists := h.Subscribers["ticker"]; exists {
 		delete(topic, TickerParams{Pair: pair})
+	}
+}
+
+func (h *Hub) AddCandleStickTopic(pair string, timeframes []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if _, exists := h.Subscribers["candleStick"]; !exists {
+		h.Subscribers["candleStick"] = make(map[any]*Subscribers)
+	}
+
+	for _, timeframe := range timeframes {
+		h.Subscribers["candleStick"][CandleStickParams{Pair: pair, Timeframe: timeframe}] = &Subscribers{Clients: map[*Client]bool{}}
+	}
+}
+
+func (h *Hub) RemoveCandleStickTopic(pair string, candleStickTimeframes []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if topic, exists := h.Subscribers["candleStick"]; exists {
+		for _, timeframe := range candleStickTimeframes {
+			delete(topic, CandleStickParams{Pair: pair, Timeframe: timeframe})
+		}
 	}
 }

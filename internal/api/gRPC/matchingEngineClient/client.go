@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"os"
 
-	ws "github.com/BazaarTrade/ApiGatewayService/internal/api/websocket"
 	"github.com/BazaarTrade/MatchingEngineProtoGen/pbM"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -13,13 +12,11 @@ import (
 type Client struct {
 	client pbM.MatchingEngineClient
 	conn   *grpc.ClientConn
-	hub    *ws.Hub
 	logger *slog.Logger
 }
 
-func New(hub *ws.Hub, logger *slog.Logger) *Client {
+func New(logger *slog.Logger) *Client {
 	return &Client{
-		hub:    hub,
 		logger: logger,
 	}
 }

@@ -6,144 +6,122 @@ import (
 	"io"
 
 	"github.com/BazaarTrade/ApiGatewayService/internal/converter"
-	"github.com/BazaarTrade/ApiGatewayService/internal/models"
 	"github.com/BazaarTrade/QuoteProtoGen/pbQ"
 )
 
 func (c *Client) StartStreamReaders(pair string) {
 	go c.readPrecisedOrderBookSnapshot(pair)
-	go c.readPrecisedTrades(pair)
+	go c.readPrecisedTrade(pair)
+	go c.readCandleStick(pair)
 	go c.readTicker(pair)
 }
 
 func (c *Client) readPrecisedOrderBookSnapshot(pair string) {
-	stream, err := c.client.StreamPrecisedOrderBookSnapshot(context.Background(), &pbQ.Pair{Pair: pair})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream, err := c.client.StreamPrecisedOrderBookSnapshot(ctx, &pbQ.Pair{Pair: pair})
 	if err != nil {
 		c.logger.Error("failed to connect to pbQ OBS stream", "error", err)
 		return
 	}
 
-	defer func() {
-		if err := stream.CloseSend(); err != nil {
-			c.logger.Error("failed to close pOBSs stream", "pair", pair, "error", err)
-		}
-	}()
-
-	c.logger.Info("successfully connected to pbQ POBSs stream")
+	c.logger.Debug("successfully connected to pOBSs stream", "pair", pair)
 
 	for {
-		POBSs, err := stream.Recv()
+		pOBSs, err := stream.Recv()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				c.logger.Info("precised OBSs stream closed by server", "pair", pair)
+				c.logger.Debug("precised OBSs stream closed by server", "pair", pair)
 				return
 			}
-			c.logger.Error("failed to receive POBSs", "error", err)
+			c.logger.Error("failed to receive pOBSs", "error", err)
 			return
 		}
 
-		for precision, pbPOBS := range POBSs.PrecisedOrderBookSnapshot {
-			var POBS = models.OrderBookSnapshot{
-				Pair:    pbPOBS.Pair,
-				BidsQty: pbPOBS.BidsQty,
-				AsksQty: pbPOBS.AsksQty,
-				Bids:    make([]models.Limit, len(pbPOBS.Bids)),
-				Asks:    make([]models.Limit, len(pbPOBS.Asks)),
-			}
-
-			for i, pbBidLimit := range pbPOBS.Bids {
-				POBS.Bids[i] = models.Limit{
-					Price: pbBidLimit.Price,
-					Qty:   pbBidLimit.Qty,
-				}
-			}
-
-			for i, pbAskLimit := range pbPOBS.Asks {
-				POBS.Asks[i] = models.Limit{
-					Price: pbAskLimit.Price,
-					Qty:   pbAskLimit.Qty,
-				}
-			}
-
-			go func(POBS models.OrderBookSnapshot, precision int32) {
-				c.hub.BroadcastPrecisedOrderBookSnapshot(POBS, precision)
-			}(POBS, precision)
+		for orderBookprecision, pbPOBS := range pOBSs.PrecisedOrderBookSnapshot {
+			go c.hub.BroadcastPrecisedOrderBookSnapshot(converter.PbQOBSToModelsOBS(pbPOBS), orderBookprecision)
 		}
 	}
 }
 
-func (c *Client) readPrecisedTrades(pair string) {
-	stream, err := c.client.StreamPrecisedTrades(context.Background(), &pbQ.Pair{Pair: pair})
+func (c *Client) readPrecisedTrade(pair string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream, err := c.client.StreamPrecisedTrades(ctx, &pbQ.Pair{Pair: pair})
 	if err != nil {
-		c.logger.Error("failed to connect to pbQ precised trades stream", "error", err)
+		c.logger.Error("failed to connect to pbQ precised trade stream", "error", err)
 		return
 	}
 
-	defer func() {
-		if err := stream.CloseSend(); err != nil {
-			c.logger.Error("failed to close precised trades stream", "pair", pair, "error", err)
-		}
-	}()
-
-	c.logger.Info("successfully connected to pbQ precised trades stream")
+	c.logger.Debug("successfully connected to pbQ precised trade stream", "pair", pair)
 
 	for {
 		pbQPrecisedTrades, err := stream.Recv()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				c.logger.Info("precised trades stream closed by server", "pair", pair)
+				c.logger.Debug("precised trade stream closed by server", "pair", pair)
 				return
 			}
-			c.logger.Error("failed to receive precised trades", "error", err)
+			c.logger.Error("failed to receive precised trade", "error", err)
 			return
 		}
 
-		var precisedTrades = models.Trades{
-			Pair:   pbQPrecisedTrades.Pair,
-			Trades: make([]models.Trade, len(pbQPrecisedTrades.Trades)),
-		}
-
-		for i, pbQTrade := range pbQPrecisedTrades.Trades {
-			precisedTrades.Trades[i] = models.Trade{
-				IsBid: pbQTrade.IsBid,
-				Price: pbQTrade.Price,
-				Qty:   pbQTrade.Qty,
-				Time:  pbQTrade.Time.AsTime(),
-			}
-		}
-
-		go func(trades models.Trades) {
-			c.hub.BroadcastPrecisedTrades(trades)
-		}(precisedTrades)
+		go c.hub.BroadcastPrecisedTrades(converter.PbQTradeToModelsTrade(pbQPrecisedTrades))
 	}
 }
 
 func (c *Client) readTicker(pair string) {
-	stream, err := c.client.StreamTicker(context.Background(), &pbQ.Pair{Pair: pair})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream, err := c.client.StreamTicker(ctx, &pbQ.Pair{Pair: pair})
 	if err != nil {
 		c.logger.Error("failed to connect to pbQ ticker stream", "error", err)
 		return
 	}
 
-	defer func() {
-		if err := stream.CloseSend(); err != nil {
-			c.logger.Error("failed to close precised trades stream", "pair", pair, "error", err)
-		}
-	}()
+	c.logger.Debug("successfully connected to ticker stream", "pair", pair)
 
 	for {
 		pbQTicker, err := stream.Recv()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				c.logger.Info("ticker stream closed by server", "pair", pair)
+				c.logger.Debug("ticker stream closed by server", "pair", pair)
 				return
 			}
 			c.logger.Error("failed to receive ticker", "error", err)
 			return
 		}
 
-		go func(ticker models.Ticker) {
-			c.hub.BroadcastTicker(ticker, pair)
-		}(converter.ProtoTickerToModelsTicker(pbQTicker))
+		go c.hub.BroadcastTicker(converter.PbQTickerToModelsTicker(pbQTicker))
+	}
+}
+
+func (c *Client) readCandleStick(pair string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream, err := c.client.StreamCandleStick(ctx, &pbQ.Pair{Pair: pair})
+	if err != nil {
+		c.logger.Error("failed to connect to pbQ candle stick stream", "error", err)
+		return
+	}
+
+	c.logger.Debug("successfully connected to candleStick stream", "pair", pair)
+
+	for {
+		pbQCandleStick, err := stream.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				c.logger.Debug("candle stick stream closed by server", "pair", pair)
+				return
+			}
+			c.logger.Error("failed to receive candle stick", "error", err)
+			return
+		}
+
+		go c.hub.BroadcastCandleStick(converter.PbQCandleStickToModelsCandleStick(pbQCandleStick))
 	}
 }

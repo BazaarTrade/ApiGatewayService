@@ -1,6 +1,6 @@
 package models
 
-import "time"
+import "encoding/json"
 
 type Order struct {
 	ID         int    `json:"orderID"`
@@ -26,12 +26,9 @@ type PlaceOrderReq struct {
 }
 
 type SubscriptionRequest struct {
-	Action string `json:"action"`
-	Topic  string `json:"topic"`
-	Params struct {
-		Pair      string `json:"pair"`
-		Precision int32  `json:"precision"`
-	} `json:"params"`
+	Action string          `json:"action"`
+	Topic  string          `json:"topic"`
+	Params json.RawMessage `json:"params"`
 }
 
 type OrderBookSnapshot struct {
@@ -47,28 +44,49 @@ type Limit struct {
 	Qty   string `json:"qty"`
 }
 
-type Trades struct {
-	Pair   string  `json:"pair"`
-	Trades []Trade `json:"trades"`
-}
-
 type Trade struct {
-	IsBid bool      `json:"isBid"`
-	Price string    `json:"price"`
-	Qty   string    `json:"qty"`
-	Time  time.Time `json:"time"`
+	Pair  string `json:"pair"`
+	IsBid bool   `json:"isBid"`
+	Price string `json:"price"`
+	Qty   string `json:"qty"`
+	Time  string `json:"time"`
 }
 
 type PairParams struct {
-	Pair            string  `json:"pair"`
-	PricePrecisions []int32 `json:"pricePrecisions"`
-	QtyPrecision    int32   `json:"qtyPrecision"`
+	Pair                     string   `json:"pair"`
+	OrderBookPricePrecisions []int32  `json:"orderBookPricePrecisions"`
+	QtyPrecision             int32    `json:"qtyPrecision"`
+	CandleStickTimeframes    []string `json:"candleStickTimeframes"`
 }
 
 type Ticker struct {
-	Price     string `json:"price"`
+	Pair      string `json:"pair"`
+	LastPrice string `json:"lastPrice"`
 	Change    string `json:"change"`
 	HighPrice string `json:"highPrice"`
 	LowPrice  string `json:"lowPrice"`
+	Volume    string `json:"volume"`
 	Turnover  string `json:"turnover"`
+}
+
+type CandleStick struct {
+	ID         int    `json:"ID"`
+	Pair       string `json:"pair"`
+	Timeframe  string `json:"timeframe"`
+	OpenTime   string `json:"openTime"`
+	CloseTime  string `json:"closeTime"`
+	OpenPrice  string `json:"openPrice"`
+	ClosePrice string `json:"closePrice"`
+	HighPrice  string `json:"highPrice"`
+	LowPrice   string `json:"lowPrice"`
+	Volume     string `json:"volume"`
+	Turnover   string `json:"turnover"`
+	IsClosed   bool   `json:"isClosed"`
+}
+
+type CandleStickHistoryRequest struct {
+	Pair      string `json:"pair"`
+	Timeframe string `json:"timeframe"`
+	CandleID  int    `json:"candleID"`
+	Limit     int    `json:"limit"`
 }

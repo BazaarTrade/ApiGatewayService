@@ -8,7 +8,7 @@ import (
 )
 
 func (c *Client) CreateOrderBook(pairParams models.PairParams) error {
-	_, err := c.client.CreateOrderBook(context.Background(), &pbQ.PairParams{Pair: pairParams.Pair, PricePrecisions: pairParams.PricePrecisions, QtyPrecision: pairParams.QtyPrecision})
+	_, err := c.client.CreateOrderBook(context.Background(), &pbQ.PairParams{Pair: pairParams.Pair, PricePrecisions: pairParams.OrderBookPricePrecisions, QtyPrecision: pairParams.QtyPrecision, CandleStickTimeframes: pairParams.CandleStickTimeframes})
 	if err != nil {
 		c.logger.Error("failed calling quote engine method", "error", err)
 		return err

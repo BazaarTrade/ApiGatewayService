@@ -87,13 +87,7 @@ func (s *Server) getCurrentOrders(c echo.Context) error {
 		})
 	}
 
-	if userID < 1 {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "invalid userId",
-		})
-	}
-
-	orders, err := s.mClient.GetCurrentOrders(&pbM.UserID{UserID: int64(userID)})
+	orders, err := s.db.GetNotFilledOrdersByUser(userID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "internal error in matching engine service",
@@ -111,13 +105,7 @@ func (s *Server) getOrders(c echo.Context) error {
 		})
 	}
 
-	if userID < 1 {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "invalid userId",
-		})
-	}
-
-	orders, err := s.mClient.GetOrders(&pbM.UserID{UserID: int64(userID)})
+	orders, err := s.db.GetNotFilledOrdersByUser(userID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "internal error in matching engine service",
