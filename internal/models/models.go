@@ -90,3 +90,19 @@ type CandleStickHistoryRequest struct {
 	CandleID  int    `json:"candleID"`
 	Limit     int    `json:"limit"`
 }
+
+type RegisterRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type ChangePasswordRequest struct {
+	Email       string `json:"email"`
+	OldPassword string `json:"oldPassword"`
+	NewPassword string `json:"newPassword"`
+}

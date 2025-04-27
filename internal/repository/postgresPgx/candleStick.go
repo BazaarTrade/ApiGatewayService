@@ -17,14 +17,14 @@ func (p *Postgres) GetCandleStickHistory(req models.CandleStickHistoryRequest) (
 	if req.CandleID == 0 {
 		rows, err = p.db.Query(context.Background(), `
 		SELECT id, pair, timeframe, openTime, closeTime, openPrice, closePrice, highPrice, lowPrice, volume, turnover 
-		FROM quote.candlestick 
+		FROM quote.candlesticks 
 		WHERE pair = $1 AND timeframe = $2
 		ORDER BY id DESC LIMIT $3
 		`, req.Pair, req.Timeframe, req.Limit)
 	} else {
 		rows, err = p.db.Query(context.Background(), `
 		SELECT id, pair, timeframe, openTime, closeTime, openPrice, closePrice, highPrice, lowPrice, volume, turnover 
-		FROM quote.candlestick 
+		FROM quote.candlesticks 
 		WHERE pair = $1 AND timeframe = $2 AND id < $3
 		ORDER BY id DESC LIMIT $4
 		`, req.Pair, req.Timeframe, req.CandleID, req.Limit)

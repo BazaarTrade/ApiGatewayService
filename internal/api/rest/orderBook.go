@@ -75,6 +75,7 @@ func (s *Server) deleteOrderBook(c echo.Context) error {
 		})
 	}
 
+	s.qClient.StopStreamReadersByPair(pair)
 	s.hub.RemoveOrderBookSnapshotTopic(pair, orderBookPricePrecisions)
 	s.hub.RemoveTradesTopic(pair)
 	s.hub.RemoveTickerTopic(pair)
