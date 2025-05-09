@@ -1,0 +1,1 @@
+The ApiGatewayService is an API Gateway designed to serve as the central entry point for all external requests within the BazaarTrade ecosystem. It facilitates routing, authentication, and request forwarding to backend microservices, ensuring secure and efficient communication between clients and internal services.
